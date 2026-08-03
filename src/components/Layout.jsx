@@ -1,7 +1,9 @@
-import { NavLink, useLocation } from "react-router-dom";
-import { Search, Bell, ChevronDown } from "lucide-react";
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
+import { Search, Bell, LogOut } from "lucide-react";
 import { NAV } from "../nav";
 import clsx from "clsx";
+import { useAuth } from "../auth/AuthContext";
+import { initials, titleCase } from "../utils/format";
 
 function pageTitleFromPath(pathname) {
   for (const g of NAV) {
@@ -14,11 +16,19 @@ function pageTitleFromPath(pathname) {
 
 export default function Layout({ children }) {
   const location = useLocation();
+  const navigate = useNavigate();
+  const { user, logout } = useAuth();
   const title = pageTitleFromPath(location.pathname);
+  const name = user?.name || "Admin";
+  const role = titleCase(user?.role || "admin");
+
+  function handleLogout() {
+    logout();
+    navigate("/login", { replace: true });
+  }
 
   return (
     <div className="min-h-screen flex bg-bg">
-      {/* Sidebar */}
       <aside className="w-60 shrink-0 bg-sidebar text-white flex flex-col h-screen sticky top-0">
         <div className="h-16 flex items-center gap-2.5 px-5 border-b border-sidebarline">
           <div className="w-7 h-7 rounded bg-primary flex items-center justify-center relative">
@@ -64,18 +74,26 @@ export default function Layout({ children }) {
         </nav>
 
         <div className="p-3 border-t border-sidebarline">
-          <div className="flex items-center gap-2.5 px-2 py-2 rounded-md hover:bg-sidebarhover cursor-pointer">
-            <div className="w-7 h-7 rounded-full bg-primary/30 flex items-center justify-center text-[11px] font-semibold">MJ</div>
-            <div className="leading-tight flex-1 min-w-0">
-              <div className="text-[13px] font-medium truncate">Manjunadh</div>
-              <div className="text-[10px] text-white/40 truncate">Super Admin</div>
+          <div className="flex items-center gap-2.5 px-2 py-2 rounded-md">
+            <div className="w-7 h-7 rounded-full bg-primary/30 flex items-center justify-center text-[11px] font-semibold">
+              {initials(name)}
             </div>
-            <ChevronDown size={13} className="text-white/40" />
+            <div className="leading-tight flex-1 min-w-0">
+              <div className="text-[13px] font-medium truncate">{name}</div>
+              <div className="text-[10px] text-white/40 truncate">{role}</div>
+            </div>
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="p-1.5 rounded hover:bg-sidebarhover text-white/50 hover:text-white"
+              title="Sign out"
+            >
+              <LogOut size={14} />
+            </button>
           </div>
         </div>
       </aside>
 
-      {/* Main */}
       <div className="flex-1 min-w-0 flex flex-col">
         <header className="h-16 shrink-0 border-b border-border bg-surface flex items-center justify-between px-6 sticky top-0 z-30">
           <div>
@@ -90,12 +108,15 @@ export default function Layout({ children }) {
                 className="pl-8 pr-3 py-1.5 text-sm border border-border rounded-md bg-bg w-72 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary focus:bg-white"
               />
             </div>
-            <button className="relative w-9 h-9 rounded-md border border-border bg-white flex items-center justify-center hover:bg-bg">
+            <button
+              type="button"
+              onClick={() => navigate("/notifications")}
+              className="relative w-9 h-9 rounded-md border border-border bg-white flex items-center justify-center hover:bg-bg"
+            >
               <Bell size={15} className="text-ink" />
-              <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-danger" />
             </button>
             <div className="w-9 h-9 rounded-full bg-primary-light text-primary-dark flex items-center justify-center text-xs font-semibold border border-primary/20">
-              MJ
+              {initials(name)}
             </div>
           </div>
         </header>

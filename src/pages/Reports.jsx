@@ -1,39 +1,46 @@
-import { useState } from "react";
 import { Download } from "lucide-react";
-import { PageHeader, Card, Select, Button, Table } from "../components/ui";
-import { orders } from "../data/orders";
-import { products } from "../data/products";
-import { customers } from "../data/customers";
+import { reportsApi } from "../api";
+import { useAsync } from "../hooks/useAsync";
+import { downloadCsv, formatDate, formatINR, nameOf, titleCase } from "../utils/format";
+import { PageHeader, Card, Button, Table, Select, LoadingState, ErrorState, EmptyState } from "../components/ui";
+import { useState } from "react";
 
-const REPORTS = {
-  Sales: { columns: ["Order ID", "Customer", "Date", "Amount", "Status"], rows: orders.slice(0, 10).map(o => [o.id, o.customer, o.date, `₹${o.amount.toLocaleString("en-IN")}`, o.status]) },
-  Inventory: { columns: ["SKU", "Product", "Stock", "Status"], rows: products.slice(0, 10).map(p => [p.sku, p.name, p.stock, p.status]) },
-  Customer: { columns: ["Name", "City", "Orders", "Spend"], rows: customers.slice(0, 10).map(c => [c.name, c.city, c.orders, `₹${c.spend.toLocaleString("en-IN")}`]) },
-  Tax: { columns: ["Region", "Category", "Rate", "Collected"], rows: [["Telangana", "Laptops", "18%", "₹4,82,300"], ["Karnataka", "Laptops", "18%", "₹2,10,900"], ["All India", "Accessories", "18%", "₹1,44,220"]] },
-};
+const reportTypes = ["sales", "inventory", "customers", "tax"];
+
+function printable(value) {
+  if (value == null || value === "") return "—";
+  if (typeof value === "object") return nameOf(value, JSON.stringify(value));
+  if (typeof value === "boolean") return value ? "Yes" : "No";
+  return String(value);
+}
+
+function displayValue(key, value) {
+  if (/revenue|spend|price|tax|shipping|discount/i.test(key) && typeof value === "number") return formatINR(value);
+  if (/date|createdAt|updatedAt/i.test(key)) return formatDate(value);
+  return printable(value);
+}
 
 export default function Reports() {
-  const [type, setType] = useState("Sales");
-  const [range, setRange] = useState("Last 7 days");
-  const report = REPORTS[type];
+  const [type, setType] = useState("sales");
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+  const { data, loading, error, reload } = useAsync(() => reportsApi.get({ type, ...(from ? { from } : {}), ...(to ? { to } : {}) }), [type, from, to]);
+  const rows = data?.data?.rows || [];
+  const keys = [...new Set(rows.flatMap((row) => Object.keys(row).filter((key) => !["__v", "variants"].includes(key))))];
+  const columns = keys.map((key) => ({ key, label: key === "_id" ? (type === "sales" ? "Date" : "Group") : titleCase(key), render: (row) => displayValue(key, row[key]) }));
+  const exportRows = rows.map((row) => Object.fromEntries(keys.map((key) => [key === "_id" ? "group" : key, printable(row[key])])));
 
   return (
     <div>
-      <PageHeader
-        eyebrow="Insights" title="Reports"
-        description="Generate sales, inventory, customer, and tax reports for any date range."
-        action={<Button variant="secondary"><Download size={14} /> Export CSV</Button>}
-      />
-      <Card className="p-4 mb-4 flex items-center gap-2">
-        <Select value={type} onChange={setType} options={Object.keys(REPORTS)} />
-        <Select value={range} onChange={setRange} options={["Today", "Last 7 days", "Last 30 days", "This quarter", "Custom range"]} />
+      <PageHeader eyebrow="Insights" title="Reports" description="Generate live operational reports for a selected period." action={<Button variant="secondary" disabled={!rows.length} onClick={() => downloadCsv(`${type}-report.csv`, exportRows)}><Download size={14} /> Export CSV</Button>} />
+      <Card className="p-4 mb-4 flex flex-wrap gap-3 items-end">
+        <label className="text-xs text-muted">Report type<Select className="mt-1" value={type} onChange={setType} options={reportTypes.map((value) => ({ value, label: titleCase(value) }))} /></label>
+        <label className="text-xs text-muted">From<input className="block mt-1 border border-border rounded-md px-3 py-1.5 text-sm" type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></label>
+        <label className="text-xs text-muted">To<input className="block mt-1 border border-border rounded-md px-3 py-1.5 text-sm" type="date" value={to} onChange={(e) => setTo(e.target.value)} /></label>
       </Card>
-      <Card className="p-4">
-        <Table
-          columns={report.columns.map((c, i) => ({ key: String(i), label: c, render: (r) => r[i] }))}
-          rows={report.rows}
-        />
-      </Card>
+      {loading ? <LoadingState label={`Loading ${type} report…`} /> : error ? <ErrorState message={error} onRetry={reload} /> : rows.length ? (
+        <Card className="p-4"><Table rows={rows} columns={columns} /></Card>
+      ) : <Card><EmptyState title="No report data" description="No records matched the selected report and date range." /></Card>}
     </div>
   );
 }

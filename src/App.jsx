@@ -1,5 +1,7 @@
-import { BrowserRouter, Routes, Route } from "react-router-dom";
-import Layout from "./components/Layout";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { AuthProvider } from "./auth/AuthContext";
+import ProtectedRoute from "./components/ProtectedRoute";
+import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import Products from "./pages/Products";
 import Categories from "./pages/Categories";
@@ -28,36 +30,40 @@ import SystemSettings from "./pages/SystemSettings";
 
 export default function App() {
   return (
-    <BrowserRouter>
-      <Layout>
+    <AuthProvider>
+      <BrowserRouter>
         <Routes>
-          <Route path="/" element={<Dashboard />} />
-          <Route path="/products" element={<Products />} />
-          <Route path="/categories" element={<Categories />} />
-          <Route path="/brands" element={<Brands />} />
-          <Route path="/inventory" element={<Inventory />} />
-          <Route path="/orders" element={<Orders />} />
-          <Route path="/returns" element={<Returns />} />
-          <Route path="/coupons" element={<Coupons />} />
-          <Route path="/gift-cards" element={<GiftCards />} />
-          <Route path="/flash-sales" element={<FlashSales />} />
-          <Route path="/customers" element={<Customers />} />
-          <Route path="/reviews" element={<Reviews />} />
-          <Route path="/cms" element={<CMS />} />
-          <Route path="/marketing" element={<Marketing />} />
-          <Route path="/banners" element={<Banners />} />
-          <Route path="/taxes" element={<Taxes />} />
-          <Route path="/shipping" element={<Shipping />} />
-          <Route path="/payment-settings" element={<PaymentSettings />} />
-          <Route path="/reports" element={<Reports />} />
-          <Route path="/analytics" element={<Analytics />} />
-          <Route path="/user-roles" element={<UserRoles />} />
-          <Route path="/notifications" element={<Notifications />} />
-          <Route path="/audit-logs" element={<AuditLogs />} />
-          <Route path="/api-management" element={<ApiManagement />} />
-          <Route path="/settings" element={<SystemSettings />} />
+          <Route path="/login" element={<Login />} />
+          <Route element={<ProtectedRoute />}>
+            <Route path="/" element={<Dashboard />} />
+            <Route path="/products" element={<Products />} />
+            <Route path="/categories" element={<Categories />} />
+            <Route path="/brands" element={<Brands />} />
+            <Route path="/inventory" element={<Inventory />} />
+            <Route path="/orders" element={<Orders />} />
+            <Route path="/returns" element={<Returns />} />
+            <Route path="/coupons" element={<Coupons />} />
+            <Route path="/gift-cards" element={<GiftCards />} />
+            <Route path="/flash-sales" element={<FlashSales />} />
+            <Route path="/customers" element={<Customers />} />
+            <Route path="/reviews" element={<Reviews />} />
+            <Route path="/cms" element={<CMS />} />
+            <Route path="/marketing" element={<Marketing />} />
+            <Route path="/banners" element={<Banners />} />
+            <Route path="/taxes" element={<Taxes />} />
+            <Route path="/shipping" element={<Shipping />} />
+            <Route path="/payment-settings" element={<PaymentSettings />} />
+            <Route path="/reports" element={<Reports />} />
+            <Route path="/analytics" element={<Analytics />} />
+            <Route path="/user-roles" element={<UserRoles />} />
+            <Route path="/notifications" element={<Notifications />} />
+            <Route path="/audit-logs" element={<AuditLogs />} />
+            <Route path="/api-management" element={<ApiManagement />} />
+            <Route path="/settings" element={<SystemSettings />} />
+          </Route>
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
-      </Layout>
-    </BrowserRouter>
+      </BrowserRouter>
+    </AuthProvider>
   );
 }

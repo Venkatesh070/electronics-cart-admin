@@ -1,53 +1,63 @@
-import { useState } from "react";
-import { PageHeader, Card, Tabs, Field, inputCls, Button } from "../components/ui";
+import { useEffect, useState } from "react";
+import { Save } from "lucide-react";
+import { settingsApi } from "../api";
+import { useAsync } from "../hooks/useAsync";
+import { PageHeader, Card, Button, Field, inputCls, LoadingState, ErrorState, Badge } from "../components/ui";
+
+const blank = { storeName: "", currency: "", locale: "", timezone: "", maintenanceMode: false };
 
 export default function SystemSettings() {
-  const [tab, setTab] = useState("Store info");
-  const [maintenance, setMaintenance] = useState(false);
+  const { data, loading, error, reload } = useAsync(() => settingsApi.get(), []);
+  const [form, setForm] = useState(blank);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    if (data?.data) setForm({
+      storeName: data.data.storeName || "",
+      currency: data.data.currency || "",
+      locale: data.data.locale || "",
+      timezone: data.data.timezone || "",
+      maintenanceMode: Boolean(data.data.maintenanceMode),
+    });
+  }, [data]);
+
+  async function save(event) {
+    event.preventDefault();
+    setSaving(true);
+    setSaved(false);
+    try {
+      await settingsApi.update(form);
+      setSaved(true);
+      await reload();
+    } catch (err) {
+      window.alert(err.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (loading) return <LoadingState label="Loading system settings…" />;
+  if (error) return <ErrorState message={error} onRetry={reload} />;
 
   return (
     <div>
-      <PageHeader eyebrow="System" title="System Settings" description="Store info, locale, currency, and maintenance mode." />
-      <Tabs tabs={["Store info", "Locale & currency", "Maintenance"]} active={tab} onChange={setTab} />
-
-      {tab === "Store info" && (
-        <Card className="p-5 max-w-xl">
-          <Field label="Store name"><input className={inputCls} defaultValue="Electronics Cart" /></Field>
-          <Field label="Support email"><input className={inputCls} defaultValue="support@electronicscart.in" /></Field>
-          <Field label="Support phone"><input className={inputCls} defaultValue="+91 40 4567 8900" /></Field>
-          <Field label="Registered address"><textarea className={inputCls} rows={3} defaultValue="Electronics Cart Pvt. Ltd., Hyderabad, Telangana, India" /></Field>
-          <Button variant="primary">Save changes</Button>
-        </Card>
-      )}
-
-      {tab === "Locale & currency" && (
-        <Card className="p-5 max-w-xl">
-          <Field label="Currency"><select className={inputCls}><option>INR (₹)</option><option>USD ($)</option></select></Field>
-          <Field label="Timezone"><select className={inputCls}><option>Asia/Kolkata (IST, UTC+5:30)</option><option>Asia/Dubai (UTC+4)</option></select></Field>
-          <Field label="Default language"><select className={inputCls}><option>English</option><option>Telugu</option><option>Hindi</option></select></Field>
-          <Button variant="primary">Save changes</Button>
-        </Card>
-      )}
-
-      {tab === "Maintenance" && (
-        <Card className="p-5 max-w-xl">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <div className="font-medium text-sm">Maintenance mode</div>
-              <div className="text-xs text-muted">Take the storefront offline for scheduled maintenance.</div>
-            </div>
-            <button onClick={() => setMaintenance(!maintenance)} className={`w-9 h-5 rounded-full relative transition-colors ${maintenance ? "bg-danger" : "bg-border"}`}>
-              <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${maintenance ? "translate-x-4" : "translate-x-0.5"}`} />
-            </button>
+      <PageHeader eyebrow="Configuration" title="System settings" description="Manage global storefront defaults and maintenance access." action={saved && <Badge tone="success">Settings saved</Badge>} />
+      <form onSubmit={save}>
+        <Card className="p-5 max-w-2xl">
+          <div className="grid md:grid-cols-2 gap-x-4">
+            <div className="md:col-span-2"><Field label="Store name"><input required className={inputCls} value={form.storeName} onChange={(e) => setForm({ ...form, storeName: e.target.value })} /></Field></div>
+            <Field label="Currency"><input required className={inputCls} value={form.currency} onChange={(e) => setForm({ ...form, currency: e.target.value })} placeholder="INR" /></Field>
+            <Field label="Locale"><input required className={inputCls} value={form.locale} onChange={(e) => setForm({ ...form, locale: e.target.value })} placeholder="en-IN" /></Field>
+            <div className="md:col-span-2"><Field label="Timezone"><input required className={inputCls} value={form.timezone} onChange={(e) => setForm({ ...form, timezone: e.target.value })} placeholder="Asia/Kolkata" /></Field></div>
           </div>
-          <Field label="Maintenance message"><textarea className={inputCls} rows={3} defaultValue="We'll be back shortly — Electronics Cart is undergoing scheduled maintenance." /></Field>
-          <div className="pt-2 border-t border-border mt-4">
-            <div className="font-medium text-sm mb-1">Backups</div>
-            <div className="text-xs text-muted mb-3">Last backup: Aug 3, 2026, 3:00 AM IST</div>
-            <Button variant="secondary">Run backup now</Button>
-          </div>
+          <label className="flex items-center justify-between border border-border rounded-md p-4 my-2">
+            <div><span className="block text-sm font-medium text-ink">Maintenance mode</span><span className="text-xs text-muted">Temporarily prevent customers from accessing the storefront.</span></div>
+            <input type="checkbox" checked={form.maintenanceMode} onChange={(e) => setForm({ ...form, maintenanceMode: e.target.checked })} />
+          </label>
+          <div className="flex justify-end mt-5"><Button type="submit" disabled={saving}><Save size={14} /> {saving ? "Saving…" : "Save settings"}</Button></div>
         </Card>
-      )}
+      </form>
     </div>
   );
 }

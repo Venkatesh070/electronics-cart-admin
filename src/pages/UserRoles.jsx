@@ -1,93 +1,114 @@
 import { useState } from "react";
-import { Plus, Check } from "lucide-react";
-import { PageHeader, Card, Table, Badge, Button, Modal, Field, inputCls, Tabs } from "../components/ui";
-import { adminUsers as seed } from "../data/misc";
+import { Plus, ShieldCheck, UserPlus } from "lucide-react";
+import { rolesApi, staffApi } from "../api";
+import { useAsync } from "../hooks/useAsync";
+import { idOf, nameOf, titleCase } from "../utils/format";
+import { PageHeader, Card, Button, Table, Badge, Modal, Field, inputCls, LoadingState, ErrorState, Tabs } from "../components/ui";
 
-const MODULES = ["Products", "Orders", "Customers", "Coupons", "Reports", "System Settings"];
-const ROLES = ["Super Admin", "Manager", "Catalog Manager", "Support"];
-
-const permMatrix = {
-  "Super Admin": MODULES.reduce((a, m) => ({ ...a, [m]: { view: true, edit: true, delete: true } }), {}),
-  "Manager": MODULES.reduce((a, m) => ({ ...a, [m]: { view: true, edit: true, delete: m !== "System Settings" } }), {}),
-  "Catalog Manager": MODULES.reduce((a, m) => ({ ...a, [m]: { view: true, edit: ["Products", "Coupons"].includes(m), delete: false } }), {}),
-  "Support": MODULES.reduce((a, m) => ({ ...a, [m]: { view: true, edit: m === "Orders", delete: false } }), {}),
-};
+const staffRoles = ["support", "manager", "admin", "superadmin"];
+const blankStaff = { name: "", email: "", password: "", role: "support", adminRole: "" };
 
 export default function UserRoles() {
-  const [users, setUsers] = useState(seed);
-  const [tab, setTab] = useState("Admin users");
-  const [modal, setModal] = useState(false);
-  const [form, setForm] = useState({ name: "", email: "", role: "Support" });
+  const { data, loading, error, reload } = useAsync(async () => {
+    const [staff, roles] = await Promise.all([staffApi.list(), rolesApi.list()]);
+    return { staff: staff.data || [], roles: roles.data || [] };
+  }, []);
+  const [tab, setTab] = useState("Staff");
+  const [staffOpen, setStaffOpen] = useState(false);
+  const [roleOpen, setRoleOpen] = useState(false);
+  const [staffForm, setStaffForm] = useState(blankStaff);
+  const [roleForm, setRoleForm] = useState({ name: "", modules: "" });
+  const [saving, setSaving] = useState(false);
 
-  function invite() {
-    setUsers([{ id: `U${Date.now()}`, ...form, status: "Invited", lastActive: "—" }, ...users]);
-    setModal(false); setForm({ name: "", email: "", role: "Support" });
+  async function createStaff(event) {
+    event.preventDefault();
+    setSaving(true);
+    try {
+      await staffApi.create({ ...staffForm, adminRole: staffForm.adminRole || undefined });
+      setStaffOpen(false);
+      setStaffForm(blankStaff);
+      await reload();
+    } catch (err) {
+      window.alert(err.message);
+    } finally {
+      setSaving(false);
+    }
   }
+
+  async function assignRole(member, value) {
+    const [role, adminRole = ""] = value.split(":");
+    try {
+      await staffApi.assignRole(idOf(member), { role, adminRole: adminRole || null });
+      await reload();
+    } catch (err) {
+      window.alert(err.message);
+    }
+  }
+
+  async function createRole(event) {
+    event.preventDefault();
+    setSaving(true);
+    try {
+      const permissions = roleForm.modules.split(",").map((module) => module.trim()).filter(Boolean).map((module) => ({ module, view: true, edit: false, delete: false }));
+      await rolesApi.create({ name: roleForm.name.trim(), permissions });
+      setRoleOpen(false);
+      setRoleForm({ name: "", modules: "" });
+      await reload();
+    } catch (err) {
+      window.alert(err.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (loading) return <LoadingState label="Loading staff and roles…" />;
+  if (error) return <ErrorState message={error} onRetry={reload} />;
+
+  const staff = data?.staff || [];
+  const roles = data?.roles || [];
+  const modules = [...new Set(roles.flatMap((role) => (role.permissions || []).map((permission) => permission.module)))].sort();
 
   return (
     <div>
-      <PageHeader
-        eyebrow="System" title="User Roles"
-        description="Manage admin users, role assignment, and the permission matrix."
-        action={tab === "Admin users" && <Button variant="primary" onClick={() => setModal(true)}><Plus size={14} /> Invite admin</Button>}
-      />
-      <Tabs tabs={["Admin users", "Permission matrix"]} active={tab} onChange={setTab} />
-
-      {tab === "Admin users" ? (
+      <PageHeader eyebrow="Access control" title="User roles" description="Invite staff, assign access roles and review the permission matrix." action={<div className="flex gap-2">{tab === "Roles" && <Button variant="secondary" onClick={() => setRoleOpen(true)}><ShieldCheck size={14} /> Create role</Button>}<Button onClick={() => setStaffOpen(true)}><UserPlus size={14} /> Invite staff</Button></div>} />
+      <Tabs tabs={["Staff", "Roles"]} active={tab} onChange={setTab} />
+      {tab === "Staff" ? (
         <Card className="p-4">
-          <Table
-            columns={[
-              { key: "name", label: "Name", render: (r) => <div><div className="font-medium">{r.name}</div><div className="text-xs text-muted">{r.email}</div></div> },
-              { key: "role", label: "Role", render: (r) => <Badge tone="primary">{r.role}</Badge> },
-              { key: "status", label: "Status", render: (r) => <Badge tone={r.status === "Active" ? "success" : r.status === "Invited" ? "amber" : "danger"}>{r.status}</Badge> },
-              { key: "lastActive", label: "Last active", render: (r) => <span className="font-mono text-xs text-muted">{r.lastActive}</span> },
-            ]}
-            rows={users}
-          />
+          <Table rows={staff} columns={[
+            { key: "name", label: "Name" },
+            { key: "email", label: "Email" },
+            { key: "role", label: "Account role", render: (r) => <Badge tone="primary">{titleCase(r.role)}</Badge> },
+            { key: "adminRole", label: "Admin role", render: (r) => nameOf(r.adminRole) },
+            { key: "assign", label: "Assign", render: (r) => <select className="text-xs border border-border rounded-md px-2 py-1.5" value={`${r.role}:${idOf(r.adminRole)}`} onChange={(e) => assignRole(r, e.target.value)}>{staffRoles.map((role) => <optgroup key={role} label={titleCase(role)}><option value={`${role}:`}>{titleCase(role)} — no custom role</option>{roles.map((adminRole) => <option key={idOf(adminRole)} value={`${role}:${idOf(adminRole)}`}>{titleCase(role)} — {adminRole.name}</option>)}</optgroup>)}</select> },
+          ]} />
         </Card>
       ) : (
         <Card className="p-4 overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border">
-                <th className="text-left text-xs text-muted uppercase px-3 py-2">Module</th>
-                {ROLES.map((r) => <th key={r} className="text-center text-xs text-muted uppercase px-3 py-2">{r}</th>)}
-              </tr>
-            </thead>
-            <tbody>
-              {MODULES.map((m) => (
-                <tr key={m} className="border-b border-border last:border-0">
-                  <td className="px-3 py-2.5 font-medium">{m}</td>
-                  {ROLES.map((r) => (
-                    <td key={r} className="px-3 py-2.5 text-center">
-                      <div className="flex justify-center gap-1.5 text-[10px] text-muted">
-                        {["view", "edit", "delete"].map((p) => (
-                          <span key={p} className={`px-1.5 py-0.5 rounded ${permMatrix[r][m][p] ? "bg-success-light text-success" : "bg-gray-100 text-gray-400"}`}>
-                            {permMatrix[r][m][p] ? <Check size={10} /> : "—"}
-                          </span>
-                        ))}
-                      </div>
-                    </td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          {!roles.length ? <div className="py-12 text-center text-sm text-muted">No custom roles configured.</div> : (
+            <table className="w-full text-sm">
+              <thead><tr className="border-b border-border"><th className="text-left px-3 py-2 text-xs text-muted uppercase">Module</th>{roles.map((role) => <th key={idOf(role)} className="text-left px-3 py-2 text-xs text-muted uppercase">{role.name}<div className="normal-case font-normal">View · Edit · Delete</div></th>)}</tr></thead>
+              <tbody>{modules.map((module) => <tr key={module} className="border-b border-border last:border-0"><td className="px-3 py-3 font-medium">{titleCase(module)}</td>{roles.map((role) => { const permission = (role.permissions || []).find((item) => item.module === module); return <td key={idOf(role)} className="px-3 py-3"><span className="font-mono text-xs">{["view", "edit", "delete"].map((key) => permission?.[key] ? "✓" : "—").join("   ")}</span></td>; })}</tr>)}</tbody>
+            </table>
+          )}
         </Card>
       )}
-
-      <Modal open={modal} onClose={() => setModal(false)} title="Invite admin user">
-        <Field label="Full name"><input className={inputCls} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></Field>
-        <Field label="Email"><input type="email" className={inputCls} value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></Field>
-        <Field label="Role">
-          <select className={inputCls} value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}>
-            {ROLES.map((r) => <option key={r}>{r}</option>)}
-          </select>
-        </Field>
-        <div className="flex justify-end gap-2 mt-2">
-          <Button variant="secondary" onClick={() => setModal(false)}>Cancel</Button>
-          <Button variant="primary" onClick={invite} disabled={!form.name.trim() || !form.email.trim()}>Send invite</Button>
-        </div>
+      <Modal open={staffOpen} onClose={() => setStaffOpen(false)} title="Invite staff member">
+        <form onSubmit={createStaff}>
+          <Field label="Name"><input required className={inputCls} value={staffForm.name} onChange={(e) => setStaffForm({ ...staffForm, name: e.target.value })} /></Field>
+          <Field label="Email"><input required type="email" className={inputCls} value={staffForm.email} onChange={(e) => setStaffForm({ ...staffForm, email: e.target.value })} /></Field>
+          <Field label="Temporary password"><input required minLength="8" type="password" className={inputCls} value={staffForm.password} onChange={(e) => setStaffForm({ ...staffForm, password: e.target.value })} /></Field>
+          <Field label="Account role"><select className={inputCls} value={staffForm.role} onChange={(e) => setStaffForm({ ...staffForm, role: e.target.value })}>{staffRoles.map((role) => <option key={role} value={role}>{titleCase(role)}</option>)}</select></Field>
+          <Field label="Custom admin role (optional)"><select className={inputCls} value={staffForm.adminRole} onChange={(e) => setStaffForm({ ...staffForm, adminRole: e.target.value })}><option value="">None</option>{roles.map((role) => <option key={idOf(role)} value={idOf(role)}>{role.name}</option>)}</select></Field>
+          <div className="flex justify-end gap-2"><Button type="button" variant="secondary" onClick={() => setStaffOpen(false)}>Cancel</Button><Button type="submit" disabled={saving}>{saving ? "Creating…" : "Create staff"}</Button></div>
+        </form>
+      </Modal>
+      <Modal open={roleOpen} onClose={() => setRoleOpen(false)} title="Create role">
+        <form onSubmit={createRole}>
+          <Field label="Role name"><input required className={inputCls} value={roleForm.name} onChange={(e) => setRoleForm({ ...roleForm, name: e.target.value })} /></Field>
+          <Field label="Viewable modules (comma-separated)"><input className={inputCls} value={roleForm.modules} onChange={(e) => setRoleForm({ ...roleForm, modules: e.target.value })} placeholder="dashboard, products, orders" /></Field>
+          <p className="text-xs text-muted mb-5">New module permissions start with view access only and can be refined through the API.</p>
+          <div className="flex justify-end gap-2"><Button type="button" variant="secondary" onClick={() => setRoleOpen(false)}>Cancel</Button><Button type="submit" disabled={saving}><Plus size={14} /> Create role</Button></div>
+        </form>
       </Modal>
     </div>
   );

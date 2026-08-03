@@ -17,6 +17,25 @@ export function PageHeader({ eyebrow, title, description, action }) {
   );
 }
 
+export function LoadingState({ label = "Loading…" }) {
+  return (
+    <div className="py-16 text-center text-sm text-muted font-mono">{label}</div>
+  );
+}
+
+export function ErrorState({ message, onRetry }) {
+  return (
+    <div className="py-16 text-center space-y-3">
+      <p className="text-sm text-danger">{message || "Failed to load"}</p>
+      {onRetry && (
+        <button onClick={onRetry} className="text-sm text-primary font-medium hover:underline">
+          Try again
+        </button>
+      )}
+    </div>
+  );
+}
+
 export function Card({ className, children }) {
   return (
     <div className={clsx("bg-surface border border-border rounded-card shadow-card", className)}>
@@ -164,9 +183,9 @@ export function Drawer({ open, onClose, title, children, width = "max-w-xl" }) {
   );
 }
 
-export function Field({ label, children }) {
+export function Field({ label, children, className }) {
   return (
-    <label className="block mb-3.5">
+    <label className={clsx("block mb-3.5", className)}>
       <span className="block text-xs font-medium text-muted mb-1">{label}</span>
       {children}
     </label>

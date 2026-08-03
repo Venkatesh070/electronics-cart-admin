@@ -1,57 +1,54 @@
-import { useState } from "react";
-import { AlertTriangle, XCircle, MessageCircle, Package } from "lucide-react";
-import { PageHeader, Card, Badge } from "../components/ui";
-
-const seed = [
-  { id: "N1", icon: AlertTriangle, tone: "amber", title: "Low stock: HP Pavilion 15", desc: "Only 3 units left at Hyderabad DC", time: "10 min ago" },
-  { id: "N2", icon: XCircle, tone: "danger", title: "Payment failed for ORD-20260056", desc: "Gateway timeout on UPI payment", time: "42 min ago" },
-  { id: "N3", icon: MessageCircle, tone: "primary", title: "New support ticket #4021", desc: "Customer asking about delayed delivery", time: "1 hr ago" },
-  { id: "N4", icon: Package, tone: "success", title: "Restock complete: Dell XPS 13 Plus", desc: "40 units added at Bengaluru DC", time: "3 hr ago" },
-  { id: "N5", icon: AlertTriangle, tone: "amber", title: "Low stock: Acer Aspire Lite", desc: "Only 5 units left at Mumbai DC", time: "5 hr ago" },
-];
-
-const routing = [
-  { role: "Super Admin", channels: ["In-app", "Email"] },
-  { role: "Manager", channels: ["In-app"] },
-  { role: "Support", channels: ["In-app", "Email", "SMS"] },
-];
+import { Bell, CheckCheck } from "lucide-react";
+import { notificationsApi } from "../api";
+import { useAsync } from "../hooks/useAsync";
+import { useAuth } from "../auth/AuthContext";
+import { formatDateTime, idOf, titleCase } from "../utils/format";
+import { PageHeader, Card, Button, Badge, LoadingState, ErrorState, EmptyState } from "../components/ui";
 
 export default function Notifications() {
-  const [alerts, setAlerts] = useState(seed);
+  const { user } = useAuth();
+  const { data, loading, error, reload } = useAsync(() => notificationsApi.list(), []);
+  const notifications = data?.data || [];
+  const unread = notifications.filter((item) => !item.isRead).length;
+
+  async function markRead(notification) {
+    if (notification.isRead) return;
+    try {
+      await notificationsApi.markRead(idOf(notification));
+      await reload();
+    } catch (err) {
+      window.alert(err.message);
+    }
+  }
+
+  async function markAllRead() {
+    try {
+      await notificationsApi.markAllRead();
+      await reload();
+    } catch (err) {
+      window.alert(err.message);
+    }
+  }
+
   return (
     <div>
-      <PageHeader eyebrow="System" title="Notifications" description="System alerts for low stock, failed payments, and new tickets." />
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-        <Card className="p-4 xl:col-span-2">
-          <div className="flex flex-col divide-y divide-border">
-            {alerts.map((a) => (
-              <div key={a.id} className="flex items-start gap-3 py-3">
-                <div className={`w-8 h-8 rounded-md flex items-center justify-center shrink-0 ${a.tone === "amber" ? "bg-amber-light text-amber" : a.tone === "danger" ? "bg-danger-light text-danger" : a.tone === "success" ? "bg-success-light text-success" : "bg-primary-light text-primary-dark"}`}>
-                  <a.icon size={15} />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium text-ink">{a.title}</div>
-                  <div className="text-xs text-muted">{a.desc}</div>
-                </div>
-                <span className="text-xs text-muted shrink-0">{a.time}</span>
+      <PageHeader eyebrow="Inbox" title="Notifications" description={`Live notification feed for ${user?.name || "the current admin"}.`} action={<Button variant="secondary" disabled={!unread} onClick={markAllRead}><CheckCheck size={14} /> Mark all read</Button>} />
+      {loading ? <LoadingState label="Loading notifications…" /> : error ? <ErrorState message={error} onRetry={reload} /> : !notifications.length ? (
+        <Card><EmptyState icon={Bell} title="No notifications" description="New account notifications will appear here." /></Card>
+      ) : (
+        <Card className="divide-y divide-border">
+          {notifications.map((notification) => (
+            <button key={idOf(notification)} onClick={() => markRead(notification)} className={`w-full text-left p-4 flex gap-3 hover:bg-bg/70 ${notification.isRead ? "" : "bg-primary-light/30"}`}>
+              <span className={`mt-1.5 h-2 w-2 rounded-full shrink-0 ${notification.isRead ? "bg-border" : "bg-primary"}`} />
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2"><span className="font-medium text-sm text-ink">{notification.title}</span><Badge tone={notification.isRead ? "neutral" : "primary"}>{notification.isRead ? "Read" : "New"}</Badge><span className="text-xs text-muted ml-auto">{formatDateTime(notification.createdAt)}</span></div>
+                <p className="text-sm text-muted mt-1">{notification.message}</p>
+                <span className="text-xs text-muted font-mono mt-2 inline-block">{titleCase(notification.type)}</span>
               </div>
-            ))}
-          </div>
+            </button>
+          ))}
         </Card>
-        <Card className="p-4">
-          <div className="text-xs font-medium text-muted mb-3">ROUTING BY ROLE</div>
-          <div className="flex flex-col divide-y divide-border">
-            {routing.map((r) => (
-              <div key={r.role} className="py-3">
-                <div className="text-sm font-medium mb-1.5">{r.role}</div>
-                <div className="flex gap-1.5 flex-wrap">
-                  {r.channels.map((c) => <Badge key={c} tone="neutral">{c}</Badge>)}
-                </div>
-              </div>
-            ))}
-          </div>
-        </Card>
-      </div>
+      )}
     </div>
   );
 }
