@@ -7,7 +7,7 @@ React admin console for Electronics Cart, wired to the `ecommerce-backend` APIs.
 1. Backend running on `http://localhost:5000` (see `../ecommerce-backend`)
 2. Admin user seeded (`npm run seed:admin` in the backend)
 
-## Run it
+## Run 
 
 ```bash
 npm install
