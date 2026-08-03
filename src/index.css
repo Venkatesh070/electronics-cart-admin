@@ -1,0 +1,16 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html, body { @apply bg-bg text-ink font-body antialiased; }
+  * { @apply border-border; }
+}
+
+@layer components {
+  .led {
+    @apply inline-block w-2 h-2 rounded-full shrink-0;
+  }
+  .scrollbar-thin::-webkit-scrollbar { width: 6px; height: 6px; }
+  .scrollbar-thin::-webkit-scrollbar-thumb { background: #D8DCE3; border-radius: 999px; }
+}
