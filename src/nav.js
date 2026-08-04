@@ -41,7 +41,7 @@ export const NAV = [
     items: [
       { to: "/cms", label: "CMS", icon: FileText },
       { to: "/marketing", label: "Marketing", icon: Megaphone },
-      { to: "/banners", label: "Banners", icon: Image },
+      { to: "/banners", label: "Hero & Banners", icon: Image },
     ],
   },
   {

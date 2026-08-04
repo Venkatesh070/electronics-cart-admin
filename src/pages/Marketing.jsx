@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Mail, MessageSquare, Plus, Send, Trash2 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { Mail, MessageSquare, Pencil, Plus, Send, Trash2 } from "lucide-react";
 import { campaignsApi } from "../api";
 import { useAsync } from "../hooks/useAsync";
 import { formatDateTime, idOf, titleCase } from "../utils/format";
@@ -9,31 +10,13 @@ import {
   Table,
   Badge,
   Button,
-  Modal,
-  Field,
-  inputCls,
   LoadingState,
   ErrorState,
 } from "../components/ui";
 
-const EMPTY_FORM = {
-  name: "",
-  channel: "email",
-  subject: "",
-  message: "",
-  segment: "",
-  scheduledAt: "",
-};
-
-function segmentPayload(value) {
-  if (value === "customers") return { role: "customer" };
-  if (value === "vip") return { minSpend: 50000 };
-  if (value === "repeat") return { minOrders: 1 };
-  return undefined;
-}
-
 function segmentLabel(segment) {
   if (!segment || !Object.keys(segment).length) return "All users";
+  if (segment.label) return segment.label;
   if (segment.minSpend) return `Spend ≥ ₹${Number(segment.minSpend).toLocaleString("en-IN")}`;
   if (segment.minOrders) return `${segment.minOrders}+ orders`;
   if (segment.role) return titleCase(segment.role);
@@ -47,42 +30,17 @@ function rate(value, sent) {
 }
 
 function campaignTone(status) {
-  if (status === "sent") return "success";
+  if (status === "sent" || status === "active") return "success";
   if (status === "scheduled") return "amber";
   return "neutral";
 }
 
 export default function Marketing() {
-  const [modal, setModal] = useState(false);
-  const [form, setForm] = useState(EMPTY_FORM);
+  const navigate = useNavigate();
   const [savingId, setSavingId] = useState("");
   const [actionError, setActionError] = useState("");
   const query = useAsync(() => campaignsApi.list(), []);
   const campaigns = Array.isArray(query.data?.data) ? query.data.data : [];
-
-  async function create(event) {
-    event.preventDefault();
-    setSavingId("new");
-    setActionError("");
-    const payload = {
-      name: form.name.trim(),
-      channel: form.channel,
-      message: form.message.trim(),
-      ...(form.channel === "email" && form.subject.trim() ? { subject: form.subject.trim() } : {}),
-      ...(form.segment ? { segment: segmentPayload(form.segment) } : {}),
-      ...(form.scheduledAt ? { scheduledAt: new Date(form.scheduledAt).toISOString() } : {}),
-    };
-    try {
-      await campaignsApi.create(payload);
-      await query.reload();
-      setModal(false);
-      setForm(EMPTY_FORM);
-    } catch (error) {
-      setActionError(error?.message || "Could not create the campaign.");
-    } finally {
-      setSavingId("");
-    }
-  }
 
   async function send(campaign) {
     const id = idOf(campaign);
@@ -116,10 +74,14 @@ export default function Marketing() {
   return (
     <div>
       <PageHeader
-        eyebrow="Content"
-        title="Marketing"
-        description="Build email and SMS campaigns and track performance."
-        action={<Button onClick={() => { setModal(true); setActionError(""); }}><Plus size={14} /> New campaign</Button>}
+        eyebrow="Marketing"
+        title="Campaigns"
+        description="Build email, SMS and push campaigns and track performance."
+        action={
+          <Button onClick={() => navigate("/marketing/new")}>
+            <Plus size={14} /> New campaign
+          </Button>
+        }
       />
       {actionError && <p className="text-sm text-danger mb-4">{actionError}</p>}
       <Card className="p-4">
@@ -135,10 +97,20 @@ export default function Marketing() {
                 label: "Campaign",
                 render: (row) => (
                   <div className="flex items-center gap-2">
-                    {row.channel === "email" ? <Mail size={14} className="text-muted" /> : <MessageSquare size={14} className="text-muted" />}
+                    {row.channel === "sms" ? (
+                      <MessageSquare size={14} className="text-muted" />
+                    ) : (
+                      <Mail size={14} className="text-muted" />
+                    )}
                     <div>
                       <div className="font-medium text-ink">{row.name}</div>
-                      {row.scheduledAt && <div className="text-xs text-muted">{formatDateTime(row.scheduledAt)}</div>}
+                      <div className="text-xs text-muted">
+                        {row.campaignType ? titleCase(row.campaignType) : ""}
+                        {row.objective ? ` · ${titleCase(row.objective)}` : ""}
+                        {row.scheduledAt || row.startsAt
+                          ? ` · ${formatDateTime(row.startsAt || row.scheduledAt)}`
+                          : ""}
+                      </div>
                     </div>
                   </div>
                 ),
@@ -157,12 +129,21 @@ export default function Marketing() {
                 label: "",
                 render: (row) => (
                   <div className="flex justify-end gap-1">
+                    <button
+                      type="button"
+                      onClick={() => navigate(`/marketing/${idOf(row)}/edit`)}
+                      className="p-1.5 rounded hover:bg-bg text-muted"
+                      aria-label="Edit campaign"
+                    >
+                      <Pencil size={14} />
+                    </button>
                     {row.status !== "sent" && (
                       <Button size="sm" variant="secondary" onClick={() => send(row)} disabled={savingId === idOf(row)}>
                         <Send size={13} /> Send
                       </Button>
                     )}
                     <button
+                      type="button"
                       onClick={() => remove(row)}
                       disabled={savingId === idOf(row)}
                       className="p-1.5 rounded hover:bg-danger-light text-muted hover:text-danger disabled:opacity-50"
@@ -179,46 +160,6 @@ export default function Marketing() {
           />
         )}
       </Card>
-
-      <Modal open={modal} onClose={() => setModal(false)} title="New campaign" width="max-w-xl">
-        <form onSubmit={create}>
-          <Field label="Campaign name">
-            <input autoFocus className={inputCls} value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} />
-          </Field>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4">
-            <Field label="Channel">
-              <select className={inputCls} value={form.channel} onChange={(event) => setForm({ ...form, channel: event.target.value })}>
-                <option value="email">Email</option><option value="sms">SMS</option>
-              </select>
-            </Field>
-            <Field label="Audience segment">
-              <select className={inputCls} value={form.segment} onChange={(event) => setForm({ ...form, segment: event.target.value })}>
-                <option value="">All users</option>
-                <option value="customers">All customers</option>
-                <option value="vip">VIP customers</option>
-                <option value="repeat">Repeat customers</option>
-              </select>
-            </Field>
-          </div>
-          {form.channel === "email" && (
-            <Field label="Email subject">
-              <input className={inputCls} value={form.subject} onChange={(event) => setForm({ ...form, subject: event.target.value })} />
-            </Field>
-          )}
-          <Field label="Message">
-            <textarea className={inputCls} rows={6} value={form.message} onChange={(event) => setForm({ ...form, message: event.target.value })} />
-          </Field>
-          <Field label="Schedule for (optional)">
-            <input type="datetime-local" className={inputCls} value={form.scheduledAt} onChange={(event) => setForm({ ...form, scheduledAt: event.target.value })} />
-          </Field>
-          <div className="flex justify-end gap-2 mt-2">
-            <Button type="button" variant="secondary" onClick={() => setModal(false)}>Cancel</Button>
-            <Button type="submit" disabled={savingId === "new" || !form.name.trim() || !form.message.trim()}>
-              Create campaign
-            </Button>
-          </div>
-        </form>
-      </Modal>
     </div>
   );
 }

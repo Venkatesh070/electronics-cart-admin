@@ -1,15 +1,22 @@
 import { useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
+import { settingsApi } from "../api";
+import { useAsync } from "../hooks/useAsync";
+import { mediaUrl } from "../utils/format";
 import { Button, Field, inputCls } from "../components/ui";
 
 export default function Login() {
   const { login, isAuthenticated, booting } = useAuth();
   const navigate = useNavigate();
+  const { data: settingsRes } = useAsync(() => settingsApi.public(), []);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+
+  const storeName = settingsRes?.data?.storeName || "Electronics Cart";
+  const logo = settingsRes?.data?.logo;
 
   if (!booting && isAuthenticated) return <Navigate to="/" replace />;
 
@@ -31,11 +38,15 @@ export default function Login() {
     <div className="min-h-screen bg-bg flex items-center justify-center p-6">
       <div className="w-full max-w-md bg-surface border border-border rounded-card shadow-card p-8">
         <div className="flex items-center gap-2.5 mb-6">
-          <div className="w-9 h-9 rounded bg-primary text-white flex items-center justify-center font-display font-bold text-sm">
-            EC
-          </div>
+          {logo ? (
+            <img src={mediaUrl(logo)} alt="" className="w-9 h-9 rounded object-contain bg-bg border border-border" />
+          ) : (
+            <div className="w-9 h-9 rounded bg-primary text-white flex items-center justify-center font-display font-bold text-sm">
+              EC
+            </div>
+          )}
           <div>
-            <div className="font-display font-semibold text-ink">Electronics Cart</div>
+            <div className="font-display font-semibold text-ink">{storeName}</div>
             <div className="text-[11px] text-muted font-mono tracking-wide">ADMIN CONSOLE</div>
           </div>
         </div>

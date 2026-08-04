@@ -3,9 +3,22 @@ import { Search, Bell, LogOut } from "lucide-react";
 import { NAV } from "../nav";
 import clsx from "clsx";
 import { useAuth } from "../auth/AuthContext";
-import { initials, titleCase } from "../utils/format";
+import { settingsApi } from "../api";
+import { useAsync } from "../hooks/useAsync";
+import { initials, mediaUrl, titleCase } from "../utils/format";
+import { useEffect } from "react";
 
 function pageTitleFromPath(pathname) {
+  if (pathname === "/products/new") return "Add Product";
+  if (/^\/products\/[^/]+\/edit$/.test(pathname)) return "Edit Product";
+  if (pathname === "/categories/new") return "Add Category";
+  if (/^\/categories\/[^/]+\/edit$/.test(pathname)) return "Edit Category";
+  if (pathname === "/brands/new") return "Add Brand";
+  if (/^\/brands\/[^/]+\/edit$/.test(pathname)) return "Edit Brand";
+  if (pathname === "/flash-sales/new") return "Create Flash Sale";
+  if (/^\/flash-sales\/[^/]+\/edit$/.test(pathname)) return "Edit Flash Sale";
+  if (pathname === "/marketing/new") return "Create Campaign";
+  if (/^\/marketing\/[^/]+\/edit$/.test(pathname)) return "Edit Campaign";
   for (const g of NAV) {
     for (const item of g.items) {
       if (item.end ? pathname === item.to : pathname.startsWith(item.to)) return item.label;
@@ -18,9 +31,18 @@ export default function Layout({ children }) {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, logout } = useAuth();
+  const { data: settingsRes, reload: reloadSettings } = useAsync(() => settingsApi.get(), []);
   const title = pageTitleFromPath(location.pathname);
   const name = user?.name || "Admin";
   const role = titleCase(user?.role || "admin");
+  const storeName = settingsRes?.data?.storeName || "Electronics Cart";
+  const logo = settingsRes?.data?.logo;
+
+  useEffect(() => {
+    const onChange = () => reloadSettings();
+    window.addEventListener("store-settings-changed", onChange);
+    return () => window.removeEventListener("store-settings-changed", onChange);
+  }, [reloadSettings]);
 
   function handleLogout() {
     logout();
@@ -31,12 +53,16 @@ export default function Layout({ children }) {
     <div className="min-h-screen flex bg-bg">
       <aside className="w-60 shrink-0 bg-sidebar text-white flex flex-col h-screen sticky top-0">
         <div className="h-16 flex items-center gap-2.5 px-5 border-b border-sidebarline">
-          <div className="w-7 h-7 rounded bg-primary flex items-center justify-center relative">
-            <span className="font-display font-bold text-xs">EC</span>
-            <span className="absolute -right-0.5 -top-0.5 w-1.5 h-1.5 rounded-full bg-success ring-2 ring-sidebar" />
-          </div>
-          <div className="leading-tight">
-            <div className="font-display font-semibold text-sm">Electronics Cart</div>
+          {logo ? (
+            <img src={mediaUrl(logo)} alt="" className="w-7 h-7 rounded object-contain bg-white/10" />
+          ) : (
+            <div className="w-7 h-7 rounded bg-primary flex items-center justify-center relative">
+              <span className="font-display font-bold text-xs">EC</span>
+              <span className="absolute -right-0.5 -top-0.5 w-1.5 h-1.5 rounded-full bg-success ring-2 ring-sidebar" />
+            </div>
+          )}
+          <div className="leading-tight min-w-0">
+            <div className="font-display font-semibold text-sm truncate">{storeName}</div>
             <div className="text-[10px] text-white/40 font-mono tracking-wide">ADMIN CONSOLE</div>
           </div>
         </div>

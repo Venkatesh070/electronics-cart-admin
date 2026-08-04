@@ -3,8 +3,9 @@ import { Save } from "lucide-react";
 import { settingsApi } from "../api";
 import { useAsync } from "../hooks/useAsync";
 import { PageHeader, Card, Button, Field, inputCls, LoadingState, ErrorState, Badge } from "../components/ui";
+import ImageField from "../components/ImageField";
 
-const blank = { storeName: "", currency: "", locale: "", timezone: "", maintenanceMode: false };
+const blank = { storeName: "", logo: "", currency: "", locale: "", timezone: "", maintenanceMode: false };
 
 export default function SystemSettings() {
   const { data, loading, error, reload } = useAsync(() => settingsApi.get(), []);
@@ -15,6 +16,7 @@ export default function SystemSettings() {
   useEffect(() => {
     if (data?.data) setForm({
       storeName: data.data.storeName || "",
+      logo: data.data.logo || "",
       currency: data.data.currency || "",
       locale: data.data.locale || "",
       timezone: data.data.timezone || "",
@@ -29,6 +31,7 @@ export default function SystemSettings() {
     try {
       await settingsApi.update(form);
       setSaved(true);
+      window.dispatchEvent(new Event("store-settings-changed"));
       await reload();
     } catch (err) {
       window.alert(err.message);
@@ -47,6 +50,15 @@ export default function SystemSettings() {
         <Card className="p-5 max-w-2xl">
           <div className="grid md:grid-cols-2 gap-x-4">
             <div className="md:col-span-2"><Field label="Store name"><input required className={inputCls} value={form.storeName} onChange={(e) => setForm({ ...form, storeName: e.target.value })} /></Field></div>
+            <div className="md:col-span-2">
+              <ImageField
+                label="Store logo"
+                folder="misc"
+                value={form.logo}
+                onChange={(logo) => setForm({ ...form, logo })}
+                hint="Shown in admin and storefront. PNG or SVG recommended."
+              />
+            </div>
             <Field label="Currency"><input required className={inputCls} value={form.currency} onChange={(e) => setForm({ ...form, currency: e.target.value })} placeholder="INR" /></Field>
             <Field label="Locale"><input required className={inputCls} value={form.locale} onChange={(e) => setForm({ ...form, locale: e.target.value })} placeholder="en-IN" /></Field>
             <div className="md:col-span-2"><Field label="Timezone"><input required className={inputCls} value={form.timezone} onChange={(e) => setForm({ ...form, timezone: e.target.value })} placeholder="Asia/Kolkata" /></Field></div>

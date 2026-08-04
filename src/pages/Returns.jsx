@@ -30,7 +30,7 @@ export default function Returns() {
   if (loading && !data) return <LoadingState label="Loading returns…" />;
   if (error && !data) return <ErrorState message={error} onRetry={reload} />;
   return <div>
-    <PageHeader eyebrow="Sales" title="Returns" description="Review return and exchange requests, manage pickups, and process refunds." />
+    <PageHeader eyebrow="Sales" title="Returns" description="Approve returns, mark pickup, then issue refund. Refund is only available after pickup." />
     <Card className="p-4">
       <div className="flex items-center gap-2 mb-4"><Select value={status} onChange={setStatus} options={[{ value: "All", label: "All" }, ...STATUSES.map((value) => ({ value, label: titleCase(value) }))]} /></div>
       <Table rows={rows} empty="No return requests found." onRowClick={setActive} columns={[
@@ -52,7 +52,22 @@ export default function Returns() {
           <div><div className="text-xs text-muted">Requested</div><div className="font-mono">{active.date}</div></div>
           <div><div className="text-xs text-muted">Refund amount</div><div className="font-mono">{formatINR(active.amount)}</div></div>
         </div>
-        <div className="flex justify-end gap-2"><Button variant="danger" onClick={() => updateStatus("rejected")}>Reject</Button><Button onClick={() => updateStatus("approved")}>Approve</Button></div>
+        <div className="flex flex-wrap justify-end gap-2">
+          {active.status === "requested" && (
+            <>
+              <Button variant="danger" onClick={() => updateStatus("rejected")}>Reject</Button>
+              <Button onClick={() => updateStatus("approved")}>Approve</Button>
+            </>
+          )}
+          {active.status === "approved" && (
+            <Button onClick={() => updateStatus("picked_up")}>Mark picked up</Button>
+          )}
+          {(active.status === "picked_up" || active.status === "inspected") && (
+            <Button onClick={() => updateStatus("refunded")}>
+              {active.resolution === "replacement" ? "Mark replaced" : "Mark refunded"}
+            </Button>
+          )}
+        </div>
       </div>}
     </Modal>
   </div>;

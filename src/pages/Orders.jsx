@@ -1,10 +1,11 @@
 import { useState } from "react";
-import { Check, Printer, XCircle } from "lucide-react";
+import { Check, Download, Printer, RefreshCw, Truck, XCircle } from "lucide-react";
 import { ordersApi } from "../api";
 import { useAsync } from "../hooks/useAsync";
 import { formatDate, formatINR, nameOf, ORDER_STATUS_API, ORDER_STATUS_LABEL, titleCase } from "../utils/format";
 import { Badge, Button, Card, Drawer, ErrorState, Field, inputCls, LoadingState, PageHeader, SearchInput, Select, Table } from "../components/ui";
 import StatusDot from "../components/StatusDot";
+import { openInvoicePdf } from "../utils/invoicePdf";
 
 const STAGES = ["Placed", "Confirmed", "Shipped", "Out for Delivery", "Delivered"];
 
@@ -16,7 +17,14 @@ function mapOrder(o) {
     status: ORDER_STATUS_LABEL[o.status] || titleCase(o.status), apiStatus: o.status,
     payment: o.paymentMethod || "—", date: formatDate(o.createdAt),
     items: (o.items || []).map((it) => ({ name: nameOf(it.product, it.name || "Product"), qty: it.quantity || it.qty || 1, price: Number(it.price) || 0 })),
+    awb: o.tracking?.trackingId || o.shiprocket?.awb,
+    shiprocketId: o.shiprocket?.orderId,
+    labelUrl: o.shiprocket?.labelUrl,
   };
+}
+
+function openUrl(url) {
+  if (url) window.open(url, "_blank", "noopener,noreferrer");
 }
 
 export default function Orders() {
@@ -24,6 +32,7 @@ export default function Orders() {
   const [status, setStatus] = useState("All");
   const [payment, setPayment] = useState("All");
   const [active, setActive] = useState(null);
+  const [busy, setBusy] = useState("");
   const apiStatus = status === "All" ? "" : ORDER_STATUS_API[status] || status;
   const { data, error, loading, reload } = useAsync(async () => (await ordersApi.list({ limit: 50, status: apiStatus, search: q })).data || [], [apiStatus, q]);
   const orders = (data || []).map(mapOrder);
@@ -40,10 +49,71 @@ export default function Orders() {
   async function invoice(order) {
     try {
       const res = await ordersApi.invoice(order.backendId);
-      const invoiceData = res.data || {};
-      alert(`Invoice ${invoiceData.invoiceNumber || order.id}\nCustomer: ${order.customer}\nTotal: ${formatINR(invoiceData.totalAmount ?? order.amount)}`);
-      console.info("Invoice", invoiceData);
+      openInvoicePdf(res.data || {}, { storeName: "Electronics Cart" });
     } catch (e) { alert(e?.message || "Could not load invoice"); }
+  }
+  async function shipRocket(order, force = false) {
+    setBusy(force ? "force" : "ship");
+    try {
+      let ewaybillNo;
+      if (order.amount >= 50000) {
+        const entered = window.prompt(
+          "Order is over ₹50,000 — e-way bill is mandatory.\nPaste e-way bill number (or leave blank to push GST details only):",
+          order.shiprocket?.ewaybillNo || ""
+        );
+        if (entered === null) return;
+        ewaybillNo = entered.trim();
+      }
+      const res = await ordersApi.shiprocket(order.backendId, {
+        force: force || undefined,
+        ewaybillNo: ewaybillNo || undefined,
+      });
+      const updated = mapOrder(res.data || {});
+      setActive((a) => (a ? { ...a, ...updated } : updated));
+      await reload();
+      alert(updated.awb ? `Shiprocket OK · AWB ${updated.awb}` : "Pushed to Shiprocket with GST/HSN. Assign courier / upload e-way bill if still required.");
+    } catch (e) {
+      alert(e?.message || "Shiprocket failed");
+    } finally {
+      setBusy("");
+    }
+  }
+  async function syncRocket(order) {
+    setBusy("sync");
+    try {
+      const res = await ordersApi.syncShiprocket(order.backendId);
+      const updated = mapOrder(res.data || {});
+      setActive((a) => (a ? { ...a, ...updated } : updated));
+      await reload();
+      alert(updated.awb ? `Synced · AWB ${updated.awb}` : "Synced — AWB still missing (finish Ship Now in Shiprocket)");
+    } catch (e) {
+      alert(e?.message || "Sync failed");
+    } finally {
+      setBusy("");
+    }
+  }
+  async function downloadLabel(order) {
+    setBusy("label");
+    try {
+      const res = await ordersApi.shiprocketLabel(order.backendId);
+      openUrl(res.data?.url);
+      await reload();
+    } catch (e) {
+      alert(e?.message || "Label not ready — complete Ship Now in Shiprocket first");
+    } finally {
+      setBusy("");
+    }
+  }
+  async function downloadSrInvoice(order) {
+    setBusy("srInvoice");
+    try {
+      const res = await ordersApi.shiprocketInvoice(order.backendId);
+      openUrl(res.data?.url);
+    } catch (e) {
+      alert(e?.message || "Shiprocket invoice not ready");
+    } finally {
+      setBusy("");
+    }
   }
   if (loading && !data) return <LoadingState label="Loading orders…" />;
   if (error && !data) return <ErrorState message={error} onRetry={reload} />;
@@ -79,6 +149,38 @@ export default function Orders() {
             <span className={`text-[10px] mt-1.5 text-center ${reached ? "text-ink font-medium" : "text-muted"}`}>{stage}</span>
           </div>; })}</div>
           <Field label="Update status"><select className={inputCls} value={active.status} onChange={(e) => setOrderStatus(active, e.target.value)}>{STAGES.map((s) => <option key={s}>{s}</option>)}</select></Field>
+          <div className="mt-3 p-3 rounded-md border border-border bg-white">
+            <div className="text-xs font-medium text-muted mb-1">SHIPROCKET</div>
+            <div className="text-sm text-ink mb-2">
+              {active.awb ? <>AWB <span className="font-mono">{active.awb}</span></> : active.shiprocketId ? <>Order #{active.shiprocketId} (assign AWB in Shiprocket)</> : "Not pushed yet"}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button size="sm" variant="secondary" disabled={!!busy || !!active.shiprocketId} onClick={() => shipRocket(active)}>
+                <Truck size={13} /> {busy === "ship" ? "Pushing…" : active.shiprocketId ? "Already on Shiprocket" : "Ship with Shiprocket"}
+              </Button>
+              {active.shiprocketId && (
+                <>
+                  <Button size="sm" variant="secondary" disabled={!!busy} onClick={() => syncRocket(active)}>
+                    <RefreshCw size={13} /> {busy === "sync" ? "Syncing…" : "Sync AWB"}
+                  </Button>
+                  <Button size="sm" variant="secondary" disabled={!!busy} onClick={() => shipRocket(active, true)}>
+                    <Truck size={13} /> {busy === "force" ? "…" : "Re-push GST"}
+                  </Button>
+                  <Button size="sm" variant="secondary" disabled={!!busy} onClick={() => downloadLabel(active)}>
+                    <Download size={13} /> {busy === "label" ? "…" : "Label"}
+                  </Button>
+                  <Button size="sm" variant="secondary" disabled={!!busy} onClick={() => downloadSrInvoice(active)}>
+                    <Download size={13} /> {busy === "srInvoice" ? "…" : "SR Invoice"}
+                  </Button>
+                </>
+              )}
+            </div>
+            {active.amount >= 50000 && (
+              <p className="text-[11px] text-muted mt-2">
+                Over ₹50k: GST/HSN are sent automatically. Generate e-way bill on the GST portal, then use Re-push GST with the number (or upload in Shiprocket).
+              </p>
+            )}
+          </div>
         </div> : <Badge tone="danger">Order cancelled</Badge>}
         <div className="text-xs font-medium text-muted mb-2 mt-5">ITEMS</div>
         <div className="border border-border rounded-md divide-y divide-border mb-4">{active.items.length ? active.items.map((it, i) => <div key={i} className="flex items-center justify-between p-3 text-sm"><div><div className="font-medium">{it.name}</div><div className="text-xs text-muted">Qty {it.qty}</div></div><div className="font-mono">{formatINR(it.price)}</div></div>) : <div className="p-3 text-sm text-muted">No item details</div>}</div>

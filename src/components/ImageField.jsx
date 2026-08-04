@@ -16,6 +16,8 @@ export default function ImageField({
   multiple = false,
   objectMode = false,
   hint = "PNG, JPG or WebP up to 5MB",
+  minWidth,
+  minHeight,
 }) {
   const inputRef = useRef(null);
   const [uploading, setUploading] = useState(false);
@@ -28,6 +30,22 @@ export default function ImageField({
     return [{ url: value, isPrimary: true }];
   })();
 
+  function readImageSize(file) {
+    return new Promise((resolve, reject) => {
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        resolve({ width: img.naturalWidth, height: img.naturalHeight });
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(url);
+        reject(new Error("Could not read image dimensions"));
+      };
+      img.src = url;
+    });
+  }
+
   async function handleFiles(fileList) {
     const files = Array.from(fileList || []);
     if (!files.length) return;
@@ -36,6 +54,14 @@ export default function ImageField({
     try {
       const uploaded = [];
       for (const file of files) {
+        if (minWidth || minHeight) {
+          const { width, height } = await readImageSize(file);
+          if ((minWidth && width < minWidth) || (minHeight && height < minHeight)) {
+            throw new Error(
+              `Image is ${width}×${height}px. Minimum ${minWidth || 0}×${minHeight || 0}px required.`
+            );
+          }
+        }
         const res = await uploadsApi.image(file, folder);
         uploaded.push(res.data.url);
       }

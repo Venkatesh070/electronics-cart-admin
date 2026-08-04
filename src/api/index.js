@@ -35,6 +35,7 @@ export const productsApi = {
 export const categoriesApi = {
   list: (params) => get("/categories", params),
   tree: () => get("/categories", { tree: true }),
+  get: (id) => get(`/categories/${id}`),
   create: (body) => post("/categories", body),
   update: (id, body) => put(`/categories/${id}`, body),
   reorder: (order) => put("/categories/reorder", { order }),
@@ -43,6 +44,7 @@ export const categoriesApi = {
 
 export const brandsApi = {
   list: (params) => get("/brands", params),
+  get: (id) => get(`/brands/${id}`),
   create: (body) => post("/brands", body),
   update: (id, body) => put(`/brands/${id}`, body),
   remove: (id) => del(`/brands/${id}`),
@@ -63,6 +65,10 @@ export const ordersApi = {
   updateStatus: (id, body) => put(`/orders/${id}/status`, body),
   invoice: (id) => get(`/orders/${id}/invoice`),
   tracking: (id) => get(`/orders/${id}/tracking`),
+  shiprocket: (id, body) => post(`/orders/${id}/shiprocket`, body || {}),
+  syncShiprocket: (id) => post(`/orders/${id}/shiprocket/sync`),
+  shiprocketLabel: (id) => get(`/orders/${id}/shiprocket/label`),
+  shiprocketInvoice: (id) => get(`/orders/${id}/shiprocket/invoice`),
 };
 
 export const returnsApi = {
@@ -88,6 +94,7 @@ export const giftCardsApi = {
 
 export const flashSalesApi = {
   list: () => get("/flash-sales/admin"),
+  get: (id) => get(`/flash-sales/${id}`),
   create: (body) => post("/flash-sales", body),
   update: (id, body) => put(`/flash-sales/${id}`, body),
   remove: (id) => del(`/flash-sales/${id}`),
@@ -115,6 +122,7 @@ export const bannersApi = {
 
 export const campaignsApi = {
   list: () => get("/admin/campaigns"),
+  get: (id) => get(`/admin/campaigns/${id}`),
   create: (body) => post("/admin/campaigns", body),
   update: (id, body) => put(`/admin/campaigns/${id}`, body),
   remove: (id) => del(`/admin/campaigns/${id}`),
@@ -177,6 +185,7 @@ export const staffApi = {
 export const settingsApi = {
   get: () => get("/admin/settings"),
   update: (body) => put("/admin/settings", body),
+  public: () => get("/settings", undefined, { auth: false }),
 };
 
 export const auditLogsApi = {
