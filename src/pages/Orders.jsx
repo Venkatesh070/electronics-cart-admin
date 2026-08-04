@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Check, Download, Printer, RefreshCw, Truck, XCircle } from "lucide-react";
-import { ordersApi } from "../api";
+import { ordersApi, settingsApi } from "../api";
 import { useAsync } from "../hooks/useAsync";
 import { formatDate, formatINR, nameOf, ORDER_STATUS_API, ORDER_STATUS_LABEL, titleCase } from "../utils/format";
 import { Badge, Button, Card, Drawer, ErrorState, Field, inputCls, LoadingState, PageHeader, SearchInput, Select, Table } from "../components/ui";
@@ -16,6 +16,7 @@ function mapOrder(o) {
     city: o.shippingAddress?.city || "—", amount: Number(o.totalAmount) || 0,
     status: ORDER_STATUS_LABEL[o.status] || titleCase(o.status), apiStatus: o.status,
     payment: o.paymentMethod || "—", date: formatDate(o.createdAt),
+    shippingPhone: o.shippingAddress?.phone || "",
     items: (o.items || []).map((it) => ({ name: nameOf(it.product, it.name || "Product"), qty: it.quantity || it.qty || 1, price: Number(it.price) || 0 })),
     awb: o.tracking?.trackingId || o.shiprocket?.awb,
     shiprocketId: o.shiprocket?.orderId,
@@ -55,10 +56,49 @@ export default function Orders() {
   async function shipRocket(order, force = false) {
     setBusy(force ? "force" : "ship");
     try {
+      let phone;
+      const existingDigits = String(order.shippingPhone || "").replace(/\D/g, "").slice(-10);
+      if (existingDigits.length < 10) {
+        const entered = window.prompt(
+          "Shipping phone (10 digits) is required for Shiprocket.\nEnter customer mobile number:",
+          order.shippingPhone || ""
+        );
+        if (entered === null) return;
+        phone = entered.replace(/\D/g, "").slice(-10);
+        if (phone.length < 10) {
+          alert("Enter a valid 10-digit phone number");
+          return;
+        }
+      }
+
+      let sellerGstin;
+      if (order.amount >= 50000) {
+        let savedGstin = "";
+        try {
+          savedGstin = ((await settingsApi.get()).data || {}).sellerGstin || "";
+        } catch {
+          /* ignore */
+        }
+        if (!savedGstin) {
+          const entered = window.prompt(
+            "Order is over ₹50,000 — seller GSTIN is required for Shiprocket.\nEnter your 15-character GSTIN (saved in System Settings):",
+            ""
+          );
+          if (entered === null) return;
+          sellerGstin = entered.trim().toUpperCase();
+          if (sellerGstin.length < 15) {
+            alert("Enter a valid 15-character GSTIN");
+            return;
+          }
+        } else {
+          sellerGstin = String(savedGstin).trim().toUpperCase();
+        }
+      }
+
       let ewaybillNo;
       if (order.amount >= 50000) {
         const entered = window.prompt(
-          "Order is over ₹50,000 — e-way bill is mandatory.\nPaste e-way bill number (or leave blank to push GST details only):",
+          "E-way bill number (optional now — paste if you already have one, or leave blank):",
           order.shiprocket?.ewaybillNo || ""
         );
         if (entered === null) return;
@@ -67,6 +107,8 @@ export default function Orders() {
       const res = await ordersApi.shiprocket(order.backendId, {
         force: force || undefined,
         ewaybillNo: ewaybillNo || undefined,
+        phone: phone || undefined,
+        sellerGstin: sellerGstin || undefined,
       });
       const updated = mapOrder(res.data || {});
       setActive((a) => (a ? { ...a, ...updated } : updated));
@@ -136,7 +178,7 @@ export default function Orders() {
     </Card>
     <Drawer open={!!active} onClose={() => setActive(null)} title={active?.id}>
       {active && <div>
-        <div className="flex items-center justify-between mb-5"><div><div className="font-medium text-ink">{active.customer}</div><div className="text-xs text-muted">{active.city} · {active.payment}</div></div>
+        <div className="flex items-center justify-between mb-5"><div><div className="font-medium text-ink">{active.customer}</div><div className="text-xs text-muted">{active.city} · {active.payment}{active.shippingPhone ? ` · ${active.shippingPhone}` : ""}</div></div>
           <div className="flex gap-2"><Button size="sm" variant="secondary" onClick={() => invoice(active)}><Printer size={13} /> Invoice</Button>
             {!["Cancelled", "Delivered"].includes(active.status) && <Button size="sm" variant="danger" onClick={() => setOrderStatus(active, "Cancelled")}><XCircle size={13} /> Cancel</Button>}
           </div>

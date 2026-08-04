@@ -5,7 +5,7 @@ import { useAsync } from "../hooks/useAsync";
 import { PageHeader, Card, Button, Field, inputCls, LoadingState, ErrorState, Badge } from "../components/ui";
 import ImageField from "../components/ImageField";
 
-const blank = { storeName: "", logo: "", currency: "", locale: "", timezone: "", maintenanceMode: false };
+const blank = { storeName: "", logo: "", currency: "", locale: "", timezone: "", maintenanceMode: false, sellerGstin: "" };
 
 export default function SystemSettings() {
   const { data, loading, error, reload } = useAsync(() => settingsApi.get(), []);
@@ -21,6 +21,7 @@ export default function SystemSettings() {
       locale: data.data.locale || "",
       timezone: data.data.timezone || "",
       maintenanceMode: Boolean(data.data.maintenanceMode),
+      sellerGstin: data.data.sellerGstin || "",
     });
   }, [data]);
 
@@ -62,6 +63,18 @@ export default function SystemSettings() {
             <Field label="Currency"><input required className={inputCls} value={form.currency} onChange={(e) => setForm({ ...form, currency: e.target.value })} placeholder="INR" /></Field>
             <Field label="Locale"><input required className={inputCls} value={form.locale} onChange={(e) => setForm({ ...form, locale: e.target.value })} placeholder="en-IN" /></Field>
             <div className="md:col-span-2"><Field label="Timezone"><input required className={inputCls} value={form.timezone} onChange={(e) => setForm({ ...form, timezone: e.target.value })} placeholder="Asia/Kolkata" /></Field></div>
+            <div className="md:col-span-2">
+              <Field label="Seller GSTIN">
+                <input
+                  className={inputCls}
+                  value={form.sellerGstin}
+                  onChange={(e) => setForm({ ...form, sellerGstin: e.target.value.toUpperCase() })}
+                  placeholder="22AAAAA0000A1Z5"
+                  maxLength={15}
+                />
+              </Field>
+              <p className="text-xs text-muted -mt-2 mb-3">Required for Shiprocket on orders over ₹50,000 (tax invoice / e-way bill).</p>
+            </div>
           </div>
           <label className="flex items-center justify-between border border-border rounded-md p-4 my-2">
             <div><span className="block text-sm font-medium text-ink">Maintenance mode</span><span className="text-xs text-muted">Temporarily prevent customers from accessing the storefront.</span></div>
