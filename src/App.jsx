@@ -1,6 +1,7 @@
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { AuthProvider } from "./auth/AuthContext";
 import ProtectedRoute from "./components/ProtectedRoute";
+import DocumentMeta from "./components/DocumentMeta";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import Products from "./pages/Products";
@@ -36,6 +37,7 @@ import SystemSettings from "./pages/SystemSettings";
 export default function App() {
   return (
     <AuthProvider>
+      <DocumentMeta />
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<Login />} />

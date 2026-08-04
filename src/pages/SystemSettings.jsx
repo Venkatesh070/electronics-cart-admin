@@ -4,6 +4,8 @@ import { settingsApi } from "../api";
 import { useAsync } from "../hooks/useAsync";
 import { PageHeader, Card, Button, Field, inputCls, LoadingState, ErrorState, Badge } from "../components/ui";
 import ImageField from "../components/ImageField";
+import { mediaUrl } from "../utils/format";
+import { applyBrandIcons } from "../utils/brandIcons";
 
 const blank = { storeName: "", logo: "", currency: "", locale: "", timezone: "", maintenanceMode: false, sellerGstin: "" };
 
@@ -32,6 +34,12 @@ export default function SystemSettings() {
     try {
       await settingsApi.update(form);
       setSaved(true);
+      applyBrandIcons({
+        logoUrl: form.logo ? mediaUrl(form.logo) : "",
+        fallback: "/favicon.svg",
+        appleFallback: "/favicon.svg",
+      });
+      document.title = `${form.storeName || "Electronics Cart"} — Admin`;
       window.dispatchEvent(new Event("store-settings-changed"));
       await reload();
     } catch (err) {
@@ -57,7 +65,7 @@ export default function SystemSettings() {
                 folder="misc"
                 value={form.logo}
                 onChange={(logo) => setForm({ ...form, logo })}
-                hint="Shown in admin and storefront. PNG or SVG recommended."
+                hint="Used in admin, storefront, and the browser tab icon. PNG or SVG recommended (square works best)."
               />
             </div>
             <Field label="Currency"><input required className={inputCls} value={form.currency} onChange={(e) => setForm({ ...form, currency: e.target.value })} placeholder="INR" /></Field>
