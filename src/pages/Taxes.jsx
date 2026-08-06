@@ -5,7 +5,9 @@ import { useAsync } from "../hooks/useAsync";
 import { idOf, nameOf, titleCase } from "../utils/format";
 import { PageHeader, Card, Button, Table, Badge, Modal, Field, inputCls, LoadingState, ErrorState } from "../components/ui";
 
-const emptyForm = { region: "", ratePercent: "18", category: "", priceMode: "exclusive", active: true };
+// Inclusive by default — storefront prices are shown "Inclusive of all taxes", so a new
+// rule should not add anything on top of that price unless the admin deliberately chooses to.
+const emptyForm = { region: "", ratePercent: "18", category: "", priceMode: "inclusive", active: true };
 
 export default function Taxes() {
   const { data, loading, error, reload } = useAsync(() => taxesApi.list(), []);
@@ -24,7 +26,7 @@ export default function Taxes() {
       region: rule.region || "",
       ratePercent: String(rule.ratePercent ?? ""),
       category: idOf(rule.category),
-      priceMode: rule.priceMode || "exclusive",
+      priceMode: rule.priceMode || "inclusive",
       active: rule.active !== false,
     });
   };
@@ -96,7 +98,15 @@ export default function Taxes() {
           <Field label="Region"><input required className={inputCls} value={form.region} onChange={(e) => setForm({ ...form, region: e.target.value })} /></Field>
           <Field label="Rate (%)"><input required min="0" type="number" step="0.01" className={inputCls} value={form.ratePercent} onChange={(e) => setForm({ ...form, ratePercent: e.target.value })} /></Field>
           <Field label="Category ID (optional)"><input className={inputCls} value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} /></Field>
-          <Field label="Price mode"><select className={inputCls} value={form.priceMode} onChange={(e) => setForm({ ...form, priceMode: e.target.value })}><option value="exclusive">Tax exclusive</option><option value="inclusive">Tax inclusive</option></select></Field>
+          <Field label="Price mode">
+            <select className={inputCls} value={form.priceMode} onChange={(e) => setForm({ ...form, priceMode: e.target.value })}>
+              <option value="inclusive">Tax inclusive (recommended)</option>
+              <option value="exclusive">Tax exclusive</option>
+            </select>
+            <span className="block text-[11px] text-muted mt-1">
+              Inclusive: nothing added at checkout beyond the storefront price. Exclusive: this rate is added on top at checkout.
+            </span>
+          </Field>
           <label className="flex items-center gap-2 text-sm mb-5"><input type="checkbox" checked={form.active} onChange={(e) => setForm({ ...form, active: e.target.checked })} /> Active</label>
           <div className="flex justify-end gap-2"><Button type="button" variant="secondary" onClick={() => { setEditing(null); setForm(emptyForm); }}>Cancel</Button><Button type="submit" disabled={saving}>{saving ? "Saving…" : "Save rule"}</Button></div>
         </form>

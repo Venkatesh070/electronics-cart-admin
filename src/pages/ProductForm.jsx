@@ -279,7 +279,7 @@ function mapProductToForm(p) {
     featured: !!p.featured,
     warranty: p.warranty || "1 Year",
     returnPolicy: String(p.returnWindowDays ?? 7),
-    condition: p.condition === "refurbished" ? "refurbished" : "new",
+    condition: ["refurbished", "open-box"].includes(p.condition) ? p.condition : "new",
     countryOfOrigin: originSpec?.value || "India",
     tags: Array.isArray(p.seo?.keywords) ? p.seo.keywords : [],
     price: p.price ?? "",
@@ -1185,6 +1185,7 @@ export default function ProductForm() {
               <Label>Condition</Label>
               <select className={inputCls} value={form.condition} onChange={(e) => set("condition", e.target.value)}>
                 <option value="new">New</option>
+                <option value="open-box">Open Box (new, box opened)</option>
                 <option value="refurbished">Refurbished</option>
               </select>
             </FormField>
