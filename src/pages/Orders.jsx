@@ -5,23 +5,48 @@ import { useAsync } from "../hooks/useAsync";
 import { formatDate, formatINR, nameOf, ORDER_STATUS_API, ORDER_STATUS_LABEL, titleCase } from "../utils/format";
 import { Badge, Button, Card, Drawer, ErrorState, Field, inputCls, LoadingState, PageHeader, SearchInput, Select, Table } from "../components/ui";
 import StatusDot from "../components/StatusDot";
-import { openInvoicePdf } from "../utils/invoicePdf";
+import { openInvoicePdf, openInvoiceWindow } from "../utils/invoicePdf";
 
 const STAGES = ["Placed", "Confirmed", "Shipped", "Out for Delivery", "Delivered"];
 
 function mapOrder(o) {
   const fullId = o._id || o.id;
+  const paymentStatus = String(o.paymentStatus || "pending").toLowerCase();
   return {
-    ...o, backendId: fullId, id: `#${String(fullId).slice(-8).toUpperCase()}`, customer: nameOf(o.user),
-    city: o.shippingAddress?.city || "—", amount: Number(o.totalAmount) || 0,
-    status: ORDER_STATUS_LABEL[o.status] || titleCase(o.status), apiStatus: o.status,
-    payment: o.paymentMethod || "—", date: formatDate(o.createdAt),
+    ...o,
+    backendId: fullId,
+    id: `#${String(fullId).slice(-8).toUpperCase()}`,
+    customer: nameOf(o.user),
+    city: o.shippingAddress?.city || "—",
+    amount: Number(o.totalAmount) || 0,
+    status: ORDER_STATUS_LABEL[o.status] || titleCase(o.status),
+    apiStatus: o.status,
+    payment: o.paymentMethod || "—",
+    paymentStatus,
+    razorpayRefundId: o.razorpayRefundId || "",
+    razorpayPaymentId: o.razorpayPaymentId || "",
+    refundedAt: o.refundedAt || null,
+    date: formatDate(o.createdAt),
     shippingPhone: o.shippingAddress?.phone || "",
-    items: (o.items || []).map((it) => ({ name: nameOf(it.product, it.name || "Product"), qty: it.quantity || it.qty || 1, price: Number(it.price) || 0 })),
+    items: (o.items || []).map((it) => ({
+      name: nameOf(it.product, it.name || "Product"),
+      qty: it.quantity || it.qty || 1,
+      price: Number(it.price) || 0,
+    })),
     awb: o.tracking?.trackingId || o.shiprocket?.awb,
     shiprocketId: o.shiprocket?.orderId,
     labelUrl: o.shiprocket?.labelUrl,
   };
+}
+
+function paymentStatusBadge(order) {
+  const pay = String(order.paymentStatus || "").toLowerCase();
+  if (pay === "refunded") return <Badge tone="success">Refund initiated</Badge>;
+  if (order.apiStatus === "cancelled" && pay === "paid") return <Badge tone="amber">Refund pending</Badge>;
+  if (pay === "paid") return <Badge tone="success">Paid</Badge>;
+  if (pay === "failed") return <Badge tone="danger">Failed</Badge>;
+  if (order.apiStatus === "cancelled") return <Badge tone="neutral">No refund</Badge>;
+  return <Badge tone="neutral">{titleCase(pay || "pending")}</Badge>;
 }
 
 function openUrl(url) {
@@ -42,16 +67,53 @@ export default function Orders() {
   async function setOrderStatus(order, nextStatus) {
     try {
       const apiValue = ORDER_STATUS_API[nextStatus] || nextStatus;
-      await ordersApi.updateStatus(order.backendId, { status: apiValue });
-      setActive((a) => a ? { ...a, status: ORDER_STATUS_LABEL[apiValue] || titleCase(apiValue), apiStatus: apiValue } : a);
+      const res = await ordersApi.updateStatus(order.backendId, { status: apiValue });
+      const updated = res?.data;
+      if (updated) {
+        const mapped = mapOrder(updated);
+        setActive((a) => (a && a.backendId === order.backendId ? mapped : a));
+        if (apiValue === "cancelled") {
+          if (mapped.paymentStatus === "refunded") {
+            alert("Order cancelled. Refund initiated via payment gateway.");
+          } else if (res?.refund?.error) {
+            alert(`Order cancelled, but refund failed: ${res.refund.error}`);
+          } else if (res?.refund?.skipped) {
+            alert(`Order cancelled. Refund: ${res.refund.skipped}`);
+          }
+        }
+      } else {
+        setActive((a) =>
+          a
+            ? {
+                ...a,
+                status: ORDER_STATUS_LABEL[apiValue] || titleCase(apiValue),
+                apiStatus: apiValue,
+              }
+            : a
+        );
+      }
       await reload();
-    } catch (e) { alert(e?.message || "Could not update order"); }
+    } catch (e) {
+      alert(e?.message || "Could not update order");
+    }
   }
   async function invoice(order) {
+    const win = openInvoiceWindow();
+    if (!win) {
+      alert("Allow popups to view the invoice");
+      return;
+    }
     try {
       const res = await ordersApi.invoice(order.backendId);
-      openInvoicePdf(res.data || {}, { storeName: "Electronics Cart" });
-    } catch (e) { alert(e?.message || "Could not load invoice"); }
+      openInvoicePdf(res.data || {}, { storeName: "Electronics Cart", target: win, autoPrint: false });
+    } catch (e) {
+      try {
+        win.close();
+      } catch {
+        /* ignore */
+      }
+      alert(e?.message || "Could not load invoice");
+    }
   }
   async function shipRocket(order, force = false) {
     setBusy(force ? "force" : "ship");
@@ -171,7 +233,16 @@ export default function Orders() {
         { key: "id", label: "Order ID", render: (r) => <span className="font-mono text-xs">{r.id}</span> },
         { key: "customer", label: "Customer", render: (r) => <div><div className="font-medium">{r.customer}</div><div className="text-xs text-muted">{r.city}</div></div> },
         { key: "date", label: "Date", render: (r) => <span className="font-mono text-xs text-muted">{r.date}</span> },
-        { key: "payment", label: "Payment" },
+        {
+          key: "payment",
+          label: "Payment",
+          render: (r) => (
+            <div className="flex flex-col gap-1 items-start">
+              <span className="text-sm">{r.payment}</span>
+              {paymentStatusBadge(r)}
+            </div>
+          ),
+        },
         { key: "amount", label: "Amount", render: (r) => <span className="font-mono">{formatINR(r.amount)}</span> },
         { key: "status", label: "Status", render: (r) => <StatusDot status={r.status} /> },
       ]} />
@@ -223,7 +294,37 @@ export default function Orders() {
               </p>
             )}
           </div>
-        </div> : <Badge tone="danger">Order cancelled</Badge>}
+        </div> : (
+          <div className="mb-6 space-y-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge tone="danger">Order cancelled</Badge>
+              {paymentStatusBadge(active)}
+            </div>
+            {active.paymentStatus === "refunded" ? (
+              <div className="p-3 rounded-md border border-success/30 bg-success-light/40">
+                <div className="text-sm font-medium text-success">Refund initiated</div>
+                <p className="text-xs text-muted mt-1">
+                  Gateway refund processed for this order.
+                  {active.refundedAt ? ` · ${formatDate(active.refundedAt)}` : ""}
+                </p>
+                {active.razorpayRefundId && (
+                  <p className="text-xs font-mono text-ink mt-1.5">Refund ID: {active.razorpayRefundId}</p>
+                )}
+                {active.razorpayPaymentId && (
+                  <p className="text-xs font-mono text-muted mt-0.5">Payment ID: {active.razorpayPaymentId}</p>
+                )}
+              </div>
+            ) : active.paymentStatus === "paid" ? (
+              <div className="p-3 rounded-md border border-amber/30 bg-amber-light/50">
+                <div className="text-sm font-medium text-amber">Refund pending</div>
+                <p className="text-xs text-muted mt-1">Order is cancelled but payment is still marked paid. Check Razorpay dashboard.</p>
+              </div>
+            ) : (
+              <p className="text-xs text-muted">No online refund (COD / unpaid).</p>
+            )}
+            {active.cancelReason && <p className="text-sm text-muted">Reason: {active.cancelReason}</p>}
+          </div>
+        )}
         <div className="text-xs font-medium text-muted mb-2 mt-5">ITEMS</div>
         <div className="border border-border rounded-md divide-y divide-border mb-4">{active.items.length ? active.items.map((it, i) => <div key={i} className="flex items-center justify-between p-3 text-sm"><div><div className="font-medium">{it.name}</div><div className="text-xs text-muted">Qty {it.qty}</div></div><div className="font-mono">{formatINR(it.price)}</div></div>) : <div className="p-3 text-sm text-muted">No item details</div>}</div>
         <div className="flex justify-between text-base font-semibold py-2 border-t border-border"><span>Total</span><span className="font-mono">{formatINR(active.amount)}</span></div>

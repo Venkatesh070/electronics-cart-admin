@@ -74,6 +74,7 @@ export const ordersApi = {
 export const returnsApi = {
   list: (params) => get("/returns/admin", params),
   updateStatus: (id, body) => put(`/returns/${id}/status`, body),
+  syncShiprocket: (id) => post(`/returns/${id}/shiprocket/sync`),
 };
 
 export const couponsApi = {
