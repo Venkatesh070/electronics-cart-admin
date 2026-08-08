@@ -79,6 +79,7 @@ const blankForm = () => ({
   returnPolicy: "7",
   condition: "new",
   countryOfOrigin: "India",
+  processor: "",
   tags: [],
   sku: "",
   price: "",
@@ -259,6 +260,7 @@ function mapProductToForm(p) {
   const specs = Array.isArray(p.specifications) ? p.specifications : [];
   const hsnSpec = specs.find((s) => /hsn/i.test(s.key || ""));
   const originSpec = specs.find((s) => /country of origin/i.test(s.key || ""));
+  const processorSpec = specs.find((s) => /^processor$|^cpu$/i.test(s.key || ""));
 
   return {
     ...blankForm(),
@@ -281,6 +283,7 @@ function mapProductToForm(p) {
     returnPolicy: String(p.returnWindowDays ?? 7),
     condition: ["refurbished", "open-box"].includes(p.condition) ? p.condition : "new",
     countryOfOrigin: originSpec?.value || "India",
+    processor: processorSpec?.value || "",
     tags: Array.isArray(p.seo?.keywords) ? p.seo.keywords : [],
     price: p.price ?? "",
     stock: p.stock ?? 0,
@@ -531,10 +534,14 @@ export default function ProductForm() {
       "PRODUCT";
 
     const keptSpecs = (form._existingSpecs || []).filter(
-      (s) => !/hsn/i.test(s.key || "") && !/country of origin/i.test(s.key || "")
+      (s) =>
+        !/hsn/i.test(s.key || "") &&
+        !/country of origin/i.test(s.key || "") &&
+        !/^processor$|^cpu$/i.test(s.key || "")
     );
     if (form.hsn.trim()) keptSpecs.push({ key: "HSN / SAC", value: form.hsn.trim() });
     if (form.countryOfOrigin) keptSpecs.push({ key: "Country of Origin", value: form.countryOfOrigin });
+    if (form.processor.trim()) keptSpecs.push({ key: "Processor", value: form.processor.trim() });
 
     return {
       sku: baseSku,
@@ -1203,6 +1210,15 @@ export default function ProductForm() {
                 <option value="Taiwan">Taiwan</option>
                 <option value="Other">Other</option>
               </select>
+            </FormField>
+            <FormField>
+              <Label>Processor</Label>
+              <input
+                className={inputCls}
+                value={form.processor}
+                onChange={(e) => set("processor", e.target.value)}
+                placeholder="e.g. Intel Core i9-9980HK or Apple M2 Pro"
+              />
             </FormField>
           </div>
           <FormField className="mb-0">
